@@ -8,29 +8,50 @@ import sqlite3
 from tkinter import simpledialog
 from functools import partial
 from PyDictionary import PyDictionary
-#import requests
+from PIL import ImageTk, Image
 
-window = Tk()
 
-now = datetime.now()
-with sqlite3.connect("Scheduler.db") as db:
-    cursor = db.cursor()
+# import requests
+splash_win= Tk()
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS activities(
-id INTEGER PRIMARY KEY,
-activity TEXT NOT NULL,
-timeA INTEGER NOT NULL,
-listPos INTEGER NOT NULL);
-""")
+#Set the title of the window
+splash_win.title("Splash Screen Example")
 
-def doneScreen():
-    cursor.execute("SELECT * FROM activities")
-    arrayF = cursor.fetchall()
+#Define the size of the window or frame
+splash_win.geometry("+{}+{}".format(380, 140))
+splash_win.geometry("680x567")
+
+canvas = Canvas(splash_win, width=680, height=567)
+canvas.pack()
+img = ImageTk.PhotoImage(Image.open("Narrator.png"))
+canvas.create_image(0, 0, anchor=NW, image=img)
+
+
+def scheduleScreen(splash):
+    splash.destroy()
+    window = Tk()
+    dictionary = PyDictionary
+    now = datetime.now()
+    with sqlite3.connect("Scheduler.db") as db:
+        cursor = db.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS activities(
+    id INTEGER PRIMARY KEY,
+    activity TEXT NOT NULL,
+    timeA INTEGER NOT NULL,
+    listPos INTEGER NOT NULL);
+    """)
+
+    global pattern
+    pattern = r'[^A-Za-z0-9]+'
+    global start_background
     global activities
     activities = []
     global minutes
     minutes = []
+    cursor.execute("SELECT * FROM activities")
+    arrayF = cursor.fetchall()
     orderA = 1
     bigNum = 1
 
@@ -56,14 +77,8 @@ def doneScreen():
             orderA += 1
     global start_background
     start_background = True
-    scheduleScreen()
-
-def scheduleScreen():
-    global start_background
-    window.deiconify()
-
-    for widget in window.winfo_children():
-        widget.destroy()
+    global counterA
+    counterA = len(activities)
 
     window.geometry("+{}+{}".format(500, 200))
     window.geometry("500x500")
@@ -71,6 +86,9 @@ def scheduleScreen():
 
     topframe = Frame(window)
     topframe.pack(anchor=CENTER)
+
+    #chkExample = Checkbutton(window)
+    #chkExample.pack(in_=topframe)
 
     lblDate = Label(topframe, text="Schedule for: " + now.strftime("%d-%B-%Y"), font=("Arial", 14))
     lblDate.pack()
@@ -84,8 +102,8 @@ def scheduleScreen():
     def background():
         while True:
             backgroundTime = datetime.now()
-            if start_background == False:
-                break
+            if not start_background:
+                window.destroy()
             timeN = backgroundTime.strftime("%H:%M:%S")
             lblTime.config(text=timeN)
             time.sleep(1)
@@ -94,14 +112,23 @@ def scheduleScreen():
         b = threading.Thread(name='background', target=background, daemon=True)
         b.start()
 
-    lblAct = Label(topframe, text="", font=("Arial", 40))
+    lblAct = Label(topframe, text="", font=("Arial", 28))
     lblAct.pack(pady=15)
 
     lblTimeA = Label(topframe, text="", font=("Arial", 20))
     lblTimeA.pack(pady=10)
 
     def next():
+        if butNext.cget("text") == "Save Diary":
+            messagebox.showwarning("Unsaved diary", "Please save your diary first")
+            diaryMorningScreen()
+            return
         try:
+            if len(activities) == counterA:
+                diaryMorningScreen()
+                lblAct.config(text="Complete morning diary entry", )
+                butNext.config(text=f"Save Diary")
+                return
             activity = activities.pop(0)
             lblAct.config(text=activity)
             lblAct.pack()
@@ -110,15 +137,17 @@ def scheduleScreen():
             alarm_time = now + timedelta(minutes=aTime)
             alarm_time = alarm_time.strftime("%H:%M:%S")
             lblTimeA.config(text=f"Aim to complete by: {alarm_time}")
+            butNext.config(text=f"Next task")
 
         except Exception as e:
+            diaryScreen()
             lblAct.config(text="Good work, tasks completed." + "\n" + "Please update your schedule for tomorrow." +
                                "\n" + "Stay Hard!", font=("Arial", 14))
             alarm_time = datetime.now()
             alarm_time = alarm_time.strftime("%H:%M:%S")
-            lblTimeA.config(text=f"You completed your schedule by: {alarm_time}")
-            butNext.destroy()
-            butSched.config(text="Set schedule for tomorrow", font=("Arial", 20))
+            lblTimeA.config(text=f"You completed your schedule at: {alarm_time}")
+            butNext.lower(topframe)
+            butSched.config(text="Save Diary", font=("Arial", 20))
             pass
 
         '''if activity == "Breathing":
@@ -130,19 +159,258 @@ def scheduleScreen():
             pass
         '''
 
-    butNext = Button(topframe, text="Start your schedule", command=next, font=("Arial", 20))
-    butNext.pack()
+    def doneScreen(screen):
 
-    butSched = Button(topframe, text="Schedule your day", font=("Arial", 10), command=modSchedule)
+        cursor.execute("SELECT * FROM activities")
+        arrayF = cursor.fetchall()
+        global activities
+        activities = []
+        global minutes
+        minutes = []
+        orderA = 1
+        bigNum = 1
+
+        if len(arrayF) <= 1:
+            cursor.execute("INSERT INTO activities(activity, timeA, listPos) VALUES (?, ?, ?)", ("Enter a task", 2, 1))
+
+        for z in range(0, len(arrayF)):
+            if arrayF[z][3] > bigNum:
+                bigNum = arrayF[z][3]
+
+        while True:
+            for yVar in range(0, len(arrayF)):
+                for item in range(0, len(arrayF)):
+                    if arrayF[item][3] == orderA:
+                        orderA += 1
+                        activities.append(arrayF[item][1])
+                        minutes.append(arrayF[item][2])
+                    else:
+                        pass
+            if orderA == bigNum + 1:
+                break
+            else:
+                orderA += 1
+        global counterA
+        counterA = len(activities)
+
+        screen.destroy()
+
+        lblAct.config(text="")
+
+        lblTimeA.config(text="")
+        butNext.lift(topframe)
+        butNext.config(text="Start your schedule")
+        butSched.config(text="Schedule your day", font=("Arial", 12))
+
+    butNext = Button(window, text="Start your schedule", command=next, font=("Arial", 20))
+    butNext.pack(in_=topframe)
+
+    def modSchedule():
+
+        for widget in window.winfo_children():
+            if ".!toplevel" in str(widget):
+                exits = True
+                if exits:
+                    widget.destroy()
+        if butSched.cget("text") == "Save Diary":
+            messagebox.showwarning("Unsaved diary", "Please save your diary first.")
+            diaryScreen()
+            return
+        elif butSched.cget("text") == "Save Schedule":
+            messagebox.showwarning("Save schedule", "Please save your schedule.")
+        else:
+            butSched.config(text="Save Schedule")
+        try:
+            butNext.lower(topframe)
+        except Exception:
+            pass
+
+        def addActivity():
+            txtActivity = "Activity:"
+            txtTime = "Time(Min) for activity:"
+            textOrder = "Order of activity:"
+
+            while True:
+                activity = simpledialog.askstring("Please enter new: ", txtActivity)
+                if activity is None:
+                    break
+                if activity == "":
+                    messagebox.showwarning("showwarning", "Please enter a valid activity.")
+                    continue
+                timeA = simpledialog.askinteger("Please enter new: ", txtTime)
+                if timeA is None:
+                    break
+                if timeA < 0 or timeA > 720:
+                    messagebox.showwarning("showwarning", "Please enter a valid time(mins) for activity.")
+                    continue
+                listPos = simpledialog.askinteger("Please enter new: ", textOrder)
+                if listPos is None:
+                    break
+                if listPos < 1 or listPos > 50:
+                    messagebox.showwarning("showwarning", "Please enter a valid task order.")
+                    continue
+
+                collision = cursor.fetchall()
+                orderList = []
+                for c in range(0, len(collision)):
+                    orderList.append(str(collision[c][3]))
+
+                matching = [s for s in orderList if str(listPos) in s]
+                if not matching:
+                    insert_fields = """INSERT INTO activities(activity, timeA, listPos)
+                            VALUES (?, ?, ?)"""
+                    cursor.execute(insert_fields, (activity, timeA, listPos))
+                    break
+                else:
+                    messagebox.showwarning("showwarning", "Task order already in use.\nPlease update your order first.")
+
+            db.commit()
+            gridSched()
+
+            # activities.append(txtN.get())
+            # minutes.append(30)
+
+        def removeEntry(input):
+            cursor.execute('SELECT activity FROM activities WHERE id = ?', (input,))
+            activity = str(cursor.fetchall())
+
+            # Remove special characters from the string
+            act = re.sub(pattern, ' ', activity)
+
+            if messagebox.askyesno("Deleting Entry", f"Are you sure you want to delete task: {act}"):
+                sql = "DELETE FROM activities WHERE id = ?"
+
+                cursor.execute(sql, (input,))
+
+                db.commit()
+                gridSched()
+
+        def updateEntry(input):
+
+            actV = "Activity"
+            timeV = "Time(Min) for activity"
+            rowV = "Order of activity"
+
+            while True:
+                activity = simpledialog.askstring("Please enter new: ", actV)
+                if activity is None:
+                    break
+                if activity == "":
+                    messagebox.showwarning("showwarning", "Please enter a valid activity.")
+                    continue
+                timeA = simpledialog.askinteger("Please enter new: ", timeV)
+                if timeA is None:
+                    break
+                if timeA < 0 or timeA > 720:
+                    messagebox.showwarning("showwarning", "Please enter a valid time(mins) for activity.")
+                    continue
+                listPos = simpledialog.askinteger("Please enter new: ", rowV)
+                if listPos is None:
+                    break
+                if listPos < 1 or listPos > 50:
+                    messagebox.showwarning("showwarning", "Please enter a valid task order.")
+                    continue
+
+                sql = "UPDATE activities SET activity =?, timeA =?, listPos = ? WHERE id = ?"
+
+                cursor.execute(sql, (activity, timeA, listPos, input,))
+                break
+
+            db.commit()
+            gridSched()
+
+        modSchedScreen = Toplevel(window)
+
+        modSchedScreen.geometry("+{}+{}".format(350, 0))
+        modSchedScreen.geometry("700x800")
+        modSchedScreen.title("Add new habits")
+
+        def gridSched():
+            for widget in modSchedScreen.winfo_children():
+                widget.destroy()
+            btn = Button(modSchedScreen, text="Add new activity +", command=addActivity)
+            btn.grid(column=1, row=1, pady=10)
+
+            btn = Button(modSchedScreen, text="Save", command=partial(doneScreen, modSchedScreen))
+            btn.grid(column=4, row=1)
+
+            lbl = Label(modSchedScreen, text="Order")
+            lbl.grid(column=0, row=2, padx=30)
+
+            lbl = Label(modSchedScreen, text="Activity")
+            lbl.grid(column=1, row=2, padx=80)
+
+            lbl = Label(modSchedScreen, text="Time(Min)")
+            lbl.grid(column=2, row=2, padx=40)
+
+            cursor.execute("SELECT * FROM activities")
+            if cursor.fetchall() is not None:
+                x = 0
+                iFont = 13
+                while True:
+
+                    cursor.execute("SELECT * FROM activities")
+                    array = cursor.fetchall()
+                    global arrayNew
+                    arrayNew = []
+                    listP = 1
+                    bigNum = 1
+
+                    for z in range(0, len(array)):
+                        if array[z][3] > bigNum:
+                            bigNum = array[z][3]
+
+                    while True:
+                        for yV in range(0, len(array)):
+                            for i in range(0, len(array)):
+                                if array[i][3] == listP:
+                                    arrayNew.append(array[i])
+                                    listP += 1
+                        if listP == bigNum + 1:
+                            break
+                        else:
+                            listP += 1
+
+                    if (len(array) == 0):
+                        break
+
+                    if x > 11:
+                        for widget in modSchedScreen.winfo_children():
+                            widget.config(font=("Arial", iFont))
+                        iFont -= 1
+
+                    lblOne = Label(modSchedScreen, text=arrayNew[x][3], font=("Arial", 14))
+                    lblOne.grid(column=0, row=x + 3)
+
+                    lblOne = Label(modSchedScreen, text=arrayNew[x][1])
+                    lblOne.grid(column=1, row=x + 3)
+
+                    lblOne = Label(modSchedScreen, text=arrayNew[x][2])
+                    lblOne.grid(column=2, row=x + 3)
+
+                    btn = Button(modSchedScreen, text="Delete", command=partial(removeEntry, arrayNew[x][0]),
+                                 font=("Arial", 14))
+                    btn.grid(column=3, row=x + 3, pady=10, padx=10)
+
+                    btn = Button(modSchedScreen, text="Update", command=partial(updateEntry, arrayNew[x][0]))
+                    btn.grid(column=4, row=x + 3, pady=10)
+
+                    x += 1
+
+                    cursor.execute("SELECT * FROM activities")
+                    if len(arrayNew) <= x:
+                        break
+
+        gridSched()
+
+    butSched = Button(topframe, text="Schedule your day", font=("Arial", 12), command=modSchedule)
     butSched.pack(pady=50)
 
     def bookScreen():
         for widget in window.winfo_children():
-            print(widget)
             if ".!toplevel" in str(widget):
                 exits = True
                 if exits:
-                    print("dESTROING")
                     widget.destroy()
 
         cursor.execute("""
@@ -158,7 +426,7 @@ def scheduleScreen():
             while True:
                 newBookName = simpledialog.askstring("Please enter book name: ", "Book name:")
 
-                if newBookName == None:
+                if newBookName is None:
                     break
                 if newBookName == "":
                     messagebox.showwarning("showwarning", "Please enter a valid book name.")
@@ -167,13 +435,12 @@ def scheduleScreen():
                 newChapters = simpledialog.askinteger("Chapter amount: ",
                                                       "Please enter the amount of chapters in the book: ")
 
-                if newChapters == None:
+                if newChapters is None:
                     break
 
                 if 50 < newChapters or newChapters < 1:
                     messagebox.showwarning("showwarning", "Please enter a valid chapter amount.")
                     continue
-                print(newChapters)
                 summaryB = ""
                 for i in range(1, newChapters + 1):
                     summaryB += f"\nChapter {i}:\n\n================\n"
@@ -220,8 +487,6 @@ def scheduleScreen():
             selectBScreen.title("Select Book")
             selectBScreen.geometry("300x300")
 
-            pattern = r'[^A-Za-z0-9]+'
-            print(booksArr)
             books = []
             bookIdList = []
             for i in range(0, len(booksArr)):
@@ -229,7 +494,6 @@ def scheduleScreen():
                 bookIdList.append(booksArr[i][0])
                 books.append(book)
             scrollBar = Scrollbar(selectBScreen, bg="grey")
-            print(bookIdList)
 
             scrollBar.pack(side=RIGHT, fill=BOTH)
             bookList = Listbox(selectBScreen, selectmode=BROWSE, yscrollcommand=scrollBar.set)
@@ -243,10 +507,8 @@ def scheduleScreen():
                 while True:
                     if bookList.curselection() == ():
                         break
-                    pattern = r'[^A-Za-z0-9]+'
                     choice = re.sub(pattern, ' ', str(bookList.curselection()))
                     choice = bookIdList[int(choice)]
-                    print(choice)
                     if choice == ():
                         messagebox.showwarning("showwarning", "Please select a book")
                         break
@@ -279,18 +541,14 @@ def scheduleScreen():
                 while True:
                     if bookList.curselection() == ():
                         break
-                    pattern = r'[^A-Za-z0-9]+'
+
                     choice = re.sub(pattern, '', str(bookList.curselection()))
                     choice = bookIdList[int(choice)]
-                    print(choice)
                     if choice == ():
                         messagebox.showwarning("showwarning", "Please select a book")
                         break
-                    print(choice)
                     cursor.execute('SELECT book FROM Books WHERE id = ?', (choice,))
                     book = str(cursor.fetchall())
-                    print(book)
-                    pattern = r'[^A-Za-z0-9]+'
                     # Remove special characters from the string
                     bookS = re.sub(pattern, ' ', book)
 
@@ -421,7 +679,6 @@ def scheduleScreen():
 
             def addWord():
                 enteredWord = entWord.get()
-                print(enteredWord)
                 if enteredWord == "":
                     messagebox.showinfo("No match", "Please enter a word into the text field")
                     return
@@ -490,7 +747,6 @@ def scheduleScreen():
 
             cursor.execute('SELECT vocabulary FROM books')
             vocabularyArr = cursor.fetchall()
-            print(vocabularyArr)
 
             vocabTxt = Text(vocScreen, wrap=WORD, height=20)
             vocabTxt.pack(pady=5, padx=10, expand=TRUE, fill=BOTH)
@@ -525,13 +781,128 @@ def scheduleScreen():
     butBook = Button(topframe, text="Books", font=("Arial", 10), command=bookScreen)
     butBook.pack()
 
-    def diaryScreen():
+    def diaryMorningScreen():
         for widget in window.winfo_children():
-            print(widget)
             if ".!toplevel" in str(widget):
                 exits = True
                 if exits:
-                    print("dESTROING")
+                    widget.destroy()
+        global currentDSel
+
+        diaryWindow = Toplevel(window)
+        diaryWindow.title("'"'Fail to plan, plan to fail.'"'")
+        diaryWindow.geometry("700x400")
+        top = Frame(diaryWindow)
+        top.pack()
+
+        lblDay = Label(diaryWindow, text="Diary entry for: " + now.strftime("%A"), font=("Arial", 14))
+        lblDay.pack(in_=top, side=TOP, pady=5)
+
+        lblDate = Label(diaryWindow, text=now.strftime("%d-%B-%Y"), font=("Arial", 20))
+        lblDate.pack(in_=top, side=TOP, pady=5)
+
+        lblGrateful = Label(diaryWindow, text="I am grateful for: ")
+        lblGrateful.pack(in_=top, side=TOP, padx=5, pady=5)
+
+        gratefulTxt = Text(diaryWindow, wrap=WORD, height=3)
+        gratefulTxt.pack(in_=top, pady=5, padx=10, expand=TRUE, fill=BOTH)
+
+        lblPlan = Label(diaryWindow, text="This is how I will make today great: ")
+        lblPlan.pack(in_=top, side=TOP, padx=5, pady=5)
+
+        planTxt = Text(diaryWindow, wrap=WORD, height=5)
+        planTxt.pack(in_=top, pady=5, padx=10, expand=TRUE, fill=BOTH)
+
+        lblAffirmation = Label(diaryWindow, text="Positive affirmation: ")
+        lblAffirmation.pack(in_=top, side=TOP, padx=5, pady=5)
+
+        affirmationTxt = Text(diaryWindow, wrap=WORD, height=2)
+        affirmationTxt.pack(in_=top, pady=5, padx=10, expand=TRUE, fill=BOTH)
+
+        def updateDiary(currentDSel):
+            while True:
+                id = currentDSel[0][0]
+                dateD = lblDate.cget("text")
+                grateful = gratefulTxt.get("1.0", 'end-1c')
+                plan = planTxt.get("1.0", 'end-1c')
+                affirmation = affirmationTxt.get("1.0", 'end-1c')
+
+                sql = "UPDATE Diary SET date =?, grateful =?, plan = ?, affirmation = ? WHERE id = ?"
+
+                cursor.execute(sql, (dateD, grateful, plan, affirmation, id,))
+                db.commit()
+                messagebox.showinfo("Success", f"Diary: {dateD} was successfully updated!")
+                doneCom()
+                break
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Diary(
+        id INTEGER PRIMARY KEY,
+        date DATE NOT NULL,
+        grateful TEXT,
+        plan TEXT,
+        affirmation TEXT,
+        deed TEXT,
+        improvement TEXT,
+        experiences TEXT,
+        day DATE);
+        """)
+
+        cursor.execute('SELECT date FROM Diary ORDER BY id DESC LIMIT 1')
+        latestDiary = cursor.fetchall()
+        if latestDiary == []:
+            cursor.execute(
+                "INSERT INTO Diary(date, grateful, plan, affirmation, deed, improvement, experiences, day) VALUES (?, ?, ?, ?,?,?,?,?)",
+                (now.strftime("%d-%B-%Y"), "1.\n2.\n3.", "", "", "", "", "1.\n2.\n3.", now.strftime("%A")))
+            cursor.execute('SELECT * FROM Diary ORDER BY id DESC LIMIT 1')
+            diary = cursor.fetchall()
+
+            currentDSel = diary
+        elif latestDiary[0][0] != now.strftime("%d-%B-%Y"):
+            cursor.execute(
+                "INSERT INTO Diary(date, grateful, plan, affirmation, deed, improvement, experiences, day) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (now.strftime("%d-%B-%Y"), "1.\n2.\n3.", "", "", "", "", "1.\n2.\n3.", now.strftime("%A")))
+            cursor.execute('SELECT * FROM Diary ORDER BY id DESC LIMIT 1')
+            diary = cursor.fetchall()
+            currentDSel = diary
+        else:
+            cursor.execute('SELECT * FROM Diary ORDER BY id DESC LIMIT 1')
+            diary = cursor.fetchall()
+            currentDSel = diary
+
+        lblDay.config(text=f"Diary entry for: {diary[0][8]}")
+        lblDate.config(text=diary[0][1])
+
+        gratefulTxt.delete(1.0, "end")
+        if diary[0][2] != "":
+            gratefulTxt.insert(1.0, diary[0][2])
+        planTxt.delete(1.0, "end")
+        if diary[0][3] != "":
+            planTxt.insert(1.0, diary[0][3])
+        affirmationTxt.delete(1.0, "end")
+        if diary[0][4] != "":
+            affirmationTxt.insert(1.0, diary[0][4])
+
+        db.commit()
+
+        butSave = Button(diaryWindow, text="Save", command=partial(updateDiary, currentDSel))
+        butSave.pack(padx=10, pady=5, side=TOP)
+
+        def doneCom():
+            global counterA
+            counterA += 1
+            butNext.config(text="Next task")
+            option = messagebox.askyesno("Quit", "Do you want to return to the main screen?")
+            if option:
+                diaryWindow.destroy()
+
+        diaryWindow.protocol("WM_DELETE_WINDOW", partial(on_closing, diaryWindow))
+
+    def diaryScreen():
+        for widget in window.winfo_children():
+            if ".!toplevel" in str(widget):
+                exits = True
+                if exits:
                     widget.destroy()
         global currentDSel
         '''def addDiaryEntry():
@@ -566,6 +937,7 @@ def scheduleScreen():
                 butSave.config(command=partial(updateBook, currentSel))
                 break
         '''
+
         def selectDiary():
             cursor.execute('SELECT id, date FROM Diary')
             diaryArr = cursor.fetchall()
@@ -582,8 +954,6 @@ def scheduleScreen():
             selectDScreen.title("Select Date of Diary entry")
             selectDScreen.geometry("300x300")
 
-            pattern = r'[^A-Za-z0-9]+'
-            print(diaryArr)
             diaries = []
             diaryIdList = []
             for i in range(0, len(diaryArr)):
@@ -591,7 +961,6 @@ def scheduleScreen():
                 diaryIdList.append(diaryArr[i][0])
                 diaries.append(dateD)
             scrollBar = Scrollbar(selectDScreen, bg="grey")
-            print(diaryIdList)
 
             scrollBar.pack(side=RIGHT, fill=BOTH)
             diaryList = Listbox(selectDScreen, selectmode=BROWSE, yscrollcommand=scrollBar.set)
@@ -606,16 +975,13 @@ def scheduleScreen():
                 while True:
                     if diaryList.curselection() == ():
                         break
-                    pattern = r'[^A-Za-z0-9]+'
                     choice = re.sub(pattern, ' ', str(diaryList.curselection()))
                     choice = diaryIdList[int(choice)]
-                    print(choice)
                     if choice == ():
                         messagebox.showwarning("showwarning", "Please select a diary")
                         break
                     cursor.execute('SELECT * FROM Diary WHERE id = ?', (choice,))
                     diary = cursor.fetchall()
-                    print(diary)
 
                     lblDay.config(text=f"Diary entry for: {diary[0][8]}")
                     lblDate.config(text=diary[0][1])
@@ -651,19 +1017,13 @@ def scheduleScreen():
                 while True:
                     if diaryList.curselection() == ():
                         break
-                    pattern = r'[^A-Za-z0-9]+'
                     choice = re.sub(pattern, '', str(diaryList.curselection()))
                     choice = diaryIdList[int(choice)]
-                    print(choice)
                     if choice == ():
                         messagebox.showwarning("showwarning", "Please select a diary")
                         break
-                    print(choice)
                     cursor.execute('SELECT date FROM Diary WHERE id = ?', (choice,))
                     diary = str(cursor.fetchall())
-                    print(diary)
-                    pattern = r'[^A-Za-z0-9]+'
-                    # Remove special characters from the string
                     diaryS = re.sub(pattern, ' ', diary)
 
                     if messagebox.askyesno("Deleting Entry", f"Are you sure you want to delete diary: {diaryS}"):
@@ -696,7 +1056,7 @@ def scheduleScreen():
             butDone.pack(padx=10, pady=5, side=TOP)
 
         diaryWindow = Toplevel(window)
-        diaryWindow.title("Your Diary")
+        diaryWindow.title("'""Accountability is the glue that ties commitment to the result.""'")
         diaryWindow.geometry("700x800")
         top = Frame(diaryWindow)
         top.pack()
@@ -716,7 +1076,7 @@ def scheduleScreen():
         selectDiary = Button(diaryWindow, text="Select diary entry", command=selectDiary)
         selectDiary.pack(in_=top, side=TOP, pady=5)
 
-        lblGrateful= Label(diaryWindow, text="I am grateful for: ")
+        lblGrateful = Label(diaryWindow, text="I am grateful for: ")
         lblGrateful.pack(in_=top, side=TOP, padx=5, pady=5)
 
         gratefulTxt = Text(diaryWindow, wrap=WORD, height=3)
@@ -726,7 +1086,7 @@ def scheduleScreen():
         lblPlan.pack(in_=top, side=TOP, padx=5, pady=5)
 
         planTxt = Text(diaryWindow, wrap=WORD, height=5)
-        planTxt.pack(in_=top,pady=5, padx=10, expand=TRUE, fill=BOTH)
+        planTxt.pack(in_=top, pady=5, padx=10, expand=TRUE, fill=BOTH)
 
         lblAffirmation = Label(diaryWindow, text="Positive affirmation: ")
         lblAffirmation.pack(in_=top, side=TOP, padx=5, pady=5)
@@ -788,6 +1148,8 @@ def scheduleScreen():
                 cursor.execute(sql, (dateD, grateful, plan, affirmation, deed, improve, experiences, id,))
                 db.commit()
                 messagebox.showinfo("Success", f"Diary: {dateD} was successfully updated!")
+                if butSched.cget("text") == "Save Diary":
+                    butSched.config(text="Set schedule for tomorrow")
                 break
 
         cursor.execute("""
@@ -805,25 +1167,20 @@ def scheduleScreen():
 
         cursor.execute('SELECT date FROM Diary ORDER BY id DESC LIMIT 1')
         latestDiary = cursor.fetchall()
-        print(now.strftime("%d-%B-%Y"))
         if latestDiary == []:
-            print(now.strftime("Trigger"))
             cursor.execute(
                 "INSERT INTO Diary(date, grateful, plan, affirmation, deed, improvement, experiences, day) VALUES (?, ?, ?, ?,?,?,?,?)",
                 (now.strftime("%d-%B-%Y"), "1.\n2.\n3.", "", "", "", "", "1.\n2.\n3.", now.strftime("%A")))
             cursor.execute('SELECT * FROM Diary ORDER BY id DESC LIMIT 1')
             diary = cursor.fetchall()
-            print(diary)
 
             currentDSel = diary
         elif latestDiary[0][0] != now.strftime("%d-%B-%Y"):
-            print(now.strftime("%d-%B-%Y"))
             cursor.execute(
                 "INSERT INTO Diary(date, grateful, plan, affirmation, deed, improvement, experiences, day) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (now.strftime("%d-%B-%Y"), "1.\n2.\n3.", "", "", "", "", "1.\n2.\n3.", now.strftime("%A")))
             cursor.execute('SELECT * FROM Diary ORDER BY id DESC LIMIT 1')
             diary = cursor.fetchall()
-            print(diary)
             currentDSel = diary
         else:
             cursor.execute('SELECT * FROM Diary ORDER BY id DESC LIMIT 1')
@@ -883,7 +1240,7 @@ def scheduleScreen():
             dayCounter = len(diariesIdList) - 1
             todayId = diariesArr[dayCounter][0]
 
-            cursor.execute('SELECT * FROM diary WHERE id = ?', (todayId, ))
+            cursor.execute('SELECT * FROM diary WHERE id = ?', (todayId,))
             todayDiary = cursor.fetchall()
 
             def dayCounterBack(input):
@@ -965,21 +1322,21 @@ def scheduleScreen():
             if len(diariesIdList) < 2:
                 pass
             else:
-                yesterdayId = diariesArr[dayCounter-1][0]
+                yesterdayId = diariesArr[dayCounter - 1][0]
                 cursor.execute('SELECT * FROM diary WHERE id = ?', (yesterdayId,))
                 yesterdayDiary = cursor.fetchall()
                 butYesterday.config(text=yesterdayDiary[0][1])
 
             lblToday = Label(diaryBookScreen, text=todayDiary[0][1])
-            lblToday.pack(in_=topDiaryList,pady=5, padx=10, side=LEFT)
+            lblToday.pack(in_=topDiaryList, pady=5, padx=10, side=LEFT)
 
             butTomorrow = Button(diaryBookScreen, text="")
             butTomorrow.pack(in_=topDiaryList, pady=5, padx=10, side=LEFT)
 
             diariesTxt = Text(diaryBookScreen, wrap=WORD, height=20)
-            diariesTxt.pack(in_=botDiaryList,pady=5, padx=10, expand=TRUE, fill=BOTH)
+            diariesTxt.pack(in_=botDiaryList, pady=5, padx=10, expand=TRUE, fill=BOTH)
 
-            #ALL FUNCTION SUPER IMPORTANT
+            # ALL FUNCTION SUPER IMPORTANT
             '''diariesTxt.delete(1.0, "end")
 
             for i in range(0, len(diariesArr)):
@@ -1019,7 +1376,6 @@ def scheduleScreen():
                 strDiary += f"\nGreat things I experienced today:\n{diariesArr[dayCounter][7]}"
             diariesTxt.insert(1.0, strDiary)
 
-
         butDiaries = Button(diaryWindow, text="Your Diary", font=("Helvetica", 14), command=diariesScreen)
         butDiaries.pack(side=TOP)
 
@@ -1039,11 +1395,9 @@ def scheduleScreen():
 
     def goalScreen():
         for widget in window.winfo_children():
-            print(widget)
             if ".!toplevel" in str(widget):
                 exits = True
                 if exits:
-                    print("dESTROING")
                     widget.destroy()
 
         cursor.execute("""
@@ -1120,8 +1474,6 @@ def scheduleScreen():
                 db.commit()
                 messagebox.showinfo("Success", f"Your goals were successfully updated!")
 
-
-                print(id, short, need, want)
                 db.commit()
                 break
 
@@ -1129,7 +1481,8 @@ def scheduleScreen():
         butSave.pack(padx=10, pady=5, side=TOP)
 
         def doneCom():
-            option = messagebox.askyesno("Quit", "Are you sure you want to return to the main screen? \n \n Unsaved changes will be lost?")
+            option = messagebox.askyesno("Quit",
+                                         "Are you sure you want to return to the main screen? \n \n Unsaved changes will be lost?")
             if option:
                 goalsWindow.destroy()
 
@@ -1141,208 +1494,19 @@ def scheduleScreen():
     butGoals = Button(topframe, text="Goals", font=("Arial", 10), command=goalScreen)
     butGoals.pack()
 
-
-def modSchedule():
-    global start_background
-    start_background = False
-    window.withdraw()
-    def addActivity():
-        txtActivity = "Activity:"
-        txtTime = "Time(Min) for activity:"
-        textOrder = "Order of activity:"
-
-        while True:
-            activity = simpledialog.askstring("Please enter new: ", txtActivity)
-            if activity == None:
-                break
-            if activity == "":
-                messagebox.showwarning("showwarning", "Please enter a valid activity.")
-                continue
-            timeA = simpledialog.askinteger("Please enter new: ", txtTime)
-            if timeA == None:
-                break
-            if timeA < 0 or timeA > 720:
-                messagebox.showwarning("showwarning", "Please enter a valid time(mins) for activity.")
-                continue
-            listPos = simpledialog.askinteger("Please enter new: ", textOrder)
-            if listPos == None:
-                break
-            if listPos < 1 or listPos > 50:
-                messagebox.showwarning("showwarning", "Please enter a valid task order.")
-                continue
-
-            collision = cursor.fetchall()
-            orderList = []
-            for c in range(0, len(collision)):
-                orderList.append(str(collision[c][3]))
-
-            matching = [s for s in orderList if str(listPos) in s]
-            if not matching:
-                insert_fields = """INSERT INTO activities(activity, timeA, listPos)
-                        VALUES (?, ?, ?)"""
-                cursor.execute(insert_fields, (activity, timeA, listPos))
-                break
+    def on_closing(screen):
+        if messagebox.askokcancel("Quit", "Are sure you want to quit? \n \n Unsaved changes will be lost."):
+            if str(screen) == ".":
+                global start_background
+                start_background = False
             else:
-                messagebox.showwarning("showwarning", "Task order already in use.\nPlease update your order first.")
+                screen.destroy()
 
-
-        db.commit()
-        gridSched()
-
-        #activities.append(txtN.get())
-        #minutes.append(30)
-
-    def removeEntry(input):
-        cursor.execute('SELECT activity FROM activities WHERE id = ?', (input,))
-        activity = str(cursor.fetchall())
-        pattern = r'[^A-Za-z0-9]+'
-        # Remove special characters from the string
-        act = re.sub(pattern, ' ', activity)
-
-        if messagebox.askyesno("Deleting Entry", f"Are you sure you want to delete task: {act}"):
-            sql = "DELETE FROM activities WHERE id = ?"
-
-            cursor.execute(sql, (input,))
-
-            db.commit()
-            gridSched()
-
-    def updateEntry(input):
-
-        actV = "Activity"
-        timeV = "Time(Min) for activity"
-        rowV = "Order of activity"
-
-        while True:
-            activity = simpledialog.askstring("Please enter new: ", actV)
-            if activity == None:
-                break
-            if activity == "":
-                messagebox.showwarning("showwarning", "Please enter a valid activity.")
-                continue
-            timeA = simpledialog.askinteger("Please enter new: ", timeV)
-            if timeA == None:
-                break
-            if timeA < 0 or timeA > 720:
-                messagebox.showwarning("showwarning", "Please enter a valid time(mins) for activity.")
-                continue
-            listPos = simpledialog.askinteger("Please enter new: ", rowV)
-            if listPos == None:
-                break
-            if listPos < 1 or listPos > 50:
-                messagebox.showwarning("showwarning", "Please enter a valid task order.")
-                continue
-
-            sql = "UPDATE activities SET activity =?, timeA =?, listPos = ? WHERE id = ?"
-
-            cursor.execute(sql, (activity, timeA, listPos, input,))
-            break
-
-        db.commit()
-        gridSched()
-
-    modSchedScreen = Toplevel(window)
-
-    modSchedScreen.geometry("+{}+{}".format(350, 0))
-    modSchedScreen.geometry("700x800")
-    modSchedScreen.title("Add new habits")
-
-    def gridSched():
-        for widget in modSchedScreen.winfo_children():
-            widget.destroy()
-        btn = Button(modSchedScreen, text="Add new activity +", command=addActivity)
-        btn.grid(column=1, row=1, pady=10)
-
-        btn = Button(modSchedScreen, text="Back", command=doneScreen)
-        btn.grid(column=4, row=1)
-
-        lbl = Label(modSchedScreen, text="Order")
-        lbl.grid(column=0, row=2, padx=30)
-
-        lbl = Label(modSchedScreen, text="Activity")
-        lbl.grid(column=1, row=2, padx=80)
-
-        lbl = Label(modSchedScreen, text="Time(Min)")
-        lbl.grid(column=2, row=2, padx=40)
-
-        cursor.execute("SELECT * FROM activities")
-        if cursor.fetchall() != None:
-            x =0
-            iFont = 13
-            while True:
-
-                cursor.execute("SELECT * FROM activities")
-                array = cursor.fetchall()
-                global arrayNew
-                arrayNew = []
-                listP = 1
-                bigNum = 1
-
-                for z in range(0, len(array)):
-                    if array[z][3] > bigNum:
-                        bigNum = array[z][3]
-
-                while True:
-                    for yV in range(0, len(array)):
-                        for i in range(0, len(array)):
-                            if array[i][3] == listP:
-                                arrayNew.append(array[i])
-                                listP += 1
-                    if listP == bigNum + 1:
-                        break
-                    else:
-                        listP += 1
-
-                if (len(array) == 0):
-                    break
-
-                if x > 11:
-                    for widget in modSchedScreen.winfo_children():
-                        widget.config(font=("Arial", iFont))
-                    iFont -= 1
-
-                lblOne = Label(modSchedScreen, text=arrayNew[x][3], font=("Arial", 14))
-                lblOne.grid(column=0, row=x + 3)
-
-                lblOne = Label(modSchedScreen, text=arrayNew[x][1])
-                lblOne.grid(column=1, row=x + 3)
-
-                lblOne = Label(modSchedScreen, text=arrayNew[x][2])
-                lblOne.grid(column=2, row=x + 3)
-
-                btn = Button(modSchedScreen, text="Delete", command=partial(removeEntry, arrayNew[x][0]), font=("Arial", 14))
-                btn.grid(column=3, row=x + 3, pady=10, padx=10)
-
-                btn = Button(modSchedScreen, text="Update", command=partial(updateEntry, arrayNew[x][0]))
-                btn.grid(column=4, row=x + 3, pady=10)
-
-                x += 1
-
-                cursor.execute("SELECT * FROM activities")
-                if len(arrayNew) <= x:
-                    break
-    gridSched()
+    window.protocol("WM_DELETE_WINDOW", partial(on_closing, window))
 
 
 
+    window.mainloop()
 
-def on_closing(screen):
-    if messagebox.askokcancel("Quit", "Are sure you want to quit? \n \n Unsaved changes will be lost."):
-        screen.destroy()
-
-
-window.protocol("WM_DELETE_WINDOW", partial(on_closing, window))
-
-m = threading.Thread(name='main', target=doneScreen())
-
-m.start()
-dictionary = PyDictionary
-window.mainloop()
-
-# TODO: Quote of the day... (api)
-# TODO: Make stock day schedule?
-# TODO: https://www.youtube.com/watch?v=gVKEM4K8J8A&ab_channel=StardustVibes-RelaxingSounds for styding
-# TODO: Convert to exe`
-
-#  Button organise schedule > new screen
-
+splash_win.after(3000, partial(scheduleScreen, splash_win))
+mainloop()
